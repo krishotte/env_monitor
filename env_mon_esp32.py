@@ -5,7 +5,7 @@ import uping
 import bme280
 import urequests
 from m_file import uini
-from machine import I2C, Pin
+from machine import I2C, Pin, ADC
 
 
 class NetworkConnection:
@@ -77,6 +77,7 @@ class NetworkConnection:
             psig.duty(10)
         else:
             psig.duty(0)
+        return check_conn
 
     def check_conn(self):
         """
@@ -109,6 +110,11 @@ config = {
     'rst_threshold': 200,
     'pwm_freq': 5000,
     'deepsleep_period': 10000,
+    'token': '',
+    'device_label': 'demo',
+    'batt_divider': 1,
+    'batt_correction': 1,
+    'batt_threshold': 3.2
 }
 config.update(uini().read("conf.json"))
 
@@ -134,20 +140,45 @@ def read_env_from_bme280():
     return data
 
 
+def read_battery_level(divider, correction):
+    """
+    reads battery voltage (V)
+    :param divider: voltage divider value - full resistance / used resistance
+    :param correction: multiplication factor
+    :return:
+    """
+    adc = ADC(Pin(33))
+    adc.atten(ADC.ATTN_11DB)    # voltage range(0, 3.6V)
+    # adc.atten(ADC.ATTN_6DB)     # voltage range(0, 2V)
+    adc.width(ADC.WIDTH_12BIT)  # 4096 levels
+
+    raw_adc_value = adc.read()
+    # voltage = raw_adc_value / 338 + 0.67  # calibrated for 470k/ 1M voltage divider
+    voltage = raw_adc_value / 402 + 0.456
+    voltage_corrected = voltage * correction
+
+    return raw_adc_value, voltage, voltage_corrected
+
+
 def write_data_to_ubidots(data):
-    token = "BBFF-iDvT8Vrl6JThnHZqgzNyO2Q7DAHdWs"  # Put your TOKEN here
-    device_label = "home_env"  # Put your device label here
+    token = config['token']  # Put your TOKEN here
+    device_label = config['device_label']  # Put your device label here
+    """
     temperature = "temperature"  # Put your first variable label here
     pressure = "pressure"  # Put your second variable label here
     humidity = "humidity"
+    """
 
     url = "http://things.ubidots.com/api/v1.6/devices/{}".format(device_label)
     headers = {"X-Auth-Token": token, "Content-Type": "application/json"}
+    """
     payload = {
         temperature: data[0],
         pressure: data[1],
         humidity: data[2]
     }
+    """
+    payload = data
 
     # Makes the HTTP requests
     status = 400
@@ -170,14 +201,69 @@ def write_data_to_ubidots(data):
 
 
 def main():
+    battery = read_battery_level(config['batt_divider'], config['batt_correction'])
+    print('battery voltage: ', battery)
+    if battery[1] < config['batt_threshold']:
+        print('!! BATTERY LEVEL LOW !!')
+
     net = NetworkConnection('conf.json')
-    net.connect2()
+    net_status = net.connect2()
 
     env = read_env_from_bme280()
     print('env: ', env)
 
-    write_data_to_ubidots(env)
+    payload = {
+        'temperature': env[0],
+        'pressure': env[1],
+        'humidity': env[2],
+        'battery': battery[1]
+    }
+    try:
+        write_data_to_ubidots(payload)
+    except (ValueError, NotImplementedError):
+        print('urequests error')
+        psig.duty(100)
+    except (IndexError, OSError):
+        print('socket error')
+        psig.duty(25)
 
     net.close()
 
-    machine.deepsleep(config['deepsleep_period'])
+    if battery[1] < config['batt_threshold']:
+        machine.deepsleep(config['deepsleep_period'] * 300)
+    else:
+        machine.deepsleep(config['deepsleep_period'])
+
+
+def test_batt():
+    battery = read_battery_level(config['batt_divider'], config['batt_correction'])
+    print('battery voltage: ', battery)
+    if battery[1] < config['batt_threshold']:
+        print('!! BATTERY LEVEL LOW !!')
+    return battery
+
+
+def test_batt_conti():
+    while True:
+        # psig.duty(100)
+        # net = NetworkConnection('conf.json')
+        #net_status = net.connect2()
+
+        battery_voltage = test_batt()[1]
+        """
+        payload = {
+            'battery': battery_voltage
+        }
+        try:
+            write_data_to_ubidots(payload)
+        except (ValueError, NotImplementedError):
+            print('urequests error')
+            psig.duty(100)
+        except (IndexError, OSError):
+            print('socket error')
+            psig.duty(25)
+
+        net.close()
+        utime.sleep(8)
+        """
+        utime.sleep(1)
