@@ -6,6 +6,7 @@ import bme280
 import urequests
 from m_file import uini
 from machine import I2C, Pin, ADC
+import json
 
 
 class NetworkConnection:
@@ -84,7 +85,7 @@ class NetworkConnection:
         checks network connection by pinging gateway
         uses uping.py
         """
-        print('is connected? (sta_if): ', self.sta_if.isconnected)
+        print('is connected? (sta_if): ', self.sta_if.isconnected())
         try:
             ping_status = uping.ping(self.gateway)
             if ping_status == (4, 4):
@@ -169,7 +170,8 @@ def write_data_to_ubidots(data):
     humidity = "humidity"
     """
 
-    url = "http://things.ubidots.com/api/v1.6/devices/{}".format(device_label)
+    # url = "http://things.ubidots.com/api/v1.6/devices/{}".format(device_label)
+    url = "http://192.168.0.14:5000/envdata"
     headers = {"X-Auth-Token": token, "Content-Type": "application/json"}
     """
     payload = {
@@ -219,7 +221,7 @@ def main():
         'battery': battery[1]
     }
     try:
-        write_data_to_ubidots(payload)
+        write_data_to_ubidots(json.dumps(payload))
     except (ValueError, NotImplementedError):
         print('urequests error')
         psig.duty(100)

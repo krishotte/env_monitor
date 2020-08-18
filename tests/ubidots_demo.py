@@ -3,7 +3,8 @@ import requests
 import math
 import random
 
-TOKEN = "BBFF-iDvT8Vrl6JThnHZqgzNyO2Q7DAHdWs"  # Put your TOKEN here
+# TOKEN = "BBFF-iDvT8Vrl6JThnHZqgzNyO2Q7DAHdWs"  # Put your TOKEN here
+TOKEN = "BBFF-gOTz2wU2j5YPIa6eukgapOCaVgaFi3"
 DEVICE_LABEL = "demo"  # Put your device label here
 VARIABLE_LABEL_1 = "variable1"  # Put your first variable label here
 VARIABLE_LABEL_2 = "demo"  # Put your second variable label here
@@ -59,7 +60,16 @@ def main():
     print("[INFO] finished")
 
 
+def write_single_value(parameter, value):
+    payload = {parameter: value}
+    post_request(payload)
+
+
 if __name__ == '__main__':
+    """
     while (True):
-        main()
+        # main()
+        
         time.sleep(1)
+    """
+    write_single_value('battery', 2)
