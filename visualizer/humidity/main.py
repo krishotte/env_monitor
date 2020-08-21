@@ -16,19 +16,26 @@ config = ini2().read(config_path)
 print(config)
 
 
-def get_data_ubidots(verbose=None):
+def get_data_ubidots(verbose=None, from_ubidots=True):
     """
     downloads all humidity data from ubidots
     :return: source, source for view, initial graph state
     """
-    url = "https://industrial.api.ubidots.com/api/v1.6/devices/{}/{}/values/?token={}&page_size={}".\
-        format(config['device'], config['variable1'], config['token'], config['size'])
+    if from_ubidots:
+        url = "https://industrial.api.ubidots.com/api/v1.6/devices/{}/{}/values/?token={}&page_size={}".\
+            format(config['device'], config['variable1'], config['token'], config['size'])
+    else:
+        # url = "http://192.168.0.14:5000/envdata"
+        url = "http://10.147.20.112:5000/envdata"
     if verbose:
         print(url)
 
     request = requests.get(url)
     status = request.status_code
-    json_data = request.json()['results']  # ["results"]
+    if from_ubidots:
+        json_data = request.json()['results']  # ["results"]
+    else:
+        json_data = request.json()
 
     print("status: ", status)
     print("downloaded data length: ", len(json_data))
@@ -36,11 +43,16 @@ def get_data_ubidots(verbose=None):
     time1 = []
     value1 = []
     for each in json_data:
-        time1.append(datetime.fromtimestamp(each['timestamp']//1000))
-        value1.append(each['value'])
+        if from_ubidots:
+            time1.append(datetime.fromtimestamp(each['timestamp']//1000))
+            value1.append(each['value'])
+        else:
+            time1.append(datetime.strptime(each[1], '%Y-%m-%dT%H:%M:%S.%fZ'))
+            value1.append(each[3])
 
-    time1.reverse()
-    value1.reverse()
+    if from_ubidots:
+        time1.reverse()
+        value1.reverse()
 
     print('first timestamp: ', time1[0], ' last timestamp: ', time1[-1])
 
@@ -60,7 +72,7 @@ def get_data_ubidots(verbose=None):
     return source_orig, source, initial_state
 
 
-source_orig, source, initial_state = get_data_ubidots(verbose=1)
+source_orig, source, initial_state = get_data_ubidots(verbose=1, from_ubidots=False)
 
 
 def create_plot(verbose=None):
@@ -130,7 +142,7 @@ layout1.sizing_mode = "scale_width"
 
 @count()
 def update(t):
-    last_data = get_new_data()
+    last_data = get_new_data(from_ubidots=False)
     print('last data', last_data)
 
     print('last valid timestamp: ', source_orig.data['x'][-1])
@@ -156,20 +168,32 @@ def update(t):
         source_orig.stream(new_data)
 
 
-def get_new_data():
-    url = "https://industrial.api.ubidots.com/api/v1.6/devices/{}/{}/values/?token={}&page_size={}". \
-        format(config['device'], config['variable1'], config['token'], 2)
+def get_new_data(from_ubidots=True):
+    if from_ubidots:
+        url = "https://industrial.api.ubidots.com/api/v1.6/devices/{}/{}/values/?token={}&page_size={}". \
+            format(config['device'], config['variable1'], config['token'], 2)
+    else:
+        # url = "http://192.168.0.14:5000/envdata-last"
+        url = "http://10.147.20.112:5000/envdata-last"
     # print(url)
 
     request = requests.get(url)
     status = request.status_code
-    json_data = request.json()['results']  # ["results"]
-
     # print("status: ", status)
+
+    if from_ubidots:
+        json_data = request.json()['results']  # ["results"]
+    else:
+        json_data = request.json()
     # print("data: ", json_data)
-    last_timestamp = datetime.fromtimestamp(json_data[0]['timestamp'] // 1000)
-    # print("last timestamp: ", last_timestamp)
-    last_value = json_data[0]['value']
+
+    if from_ubidots:
+        last_timestamp = datetime.fromtimestamp(json_data[0]['timestamp'] // 1000)
+        # print("last timestamp: ", last_timestamp)
+        last_value = json_data[0]['value']
+    else:
+        last_timestamp = datetime.strptime(json_data[1], '%Y-%m-%dT%H:%M:%S.%fZ')
+        last_value = json_data[4]
 
     return last_timestamp, last_value
 
